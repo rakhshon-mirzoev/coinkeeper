@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 
@@ -15,15 +16,15 @@ func main() {
 }
 
 func run() error {
-	cfg, err := config.Load()
-	if err != nil {
-		return err
-	}
-
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
 	slog.SetDefault(logger)
+
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
 
 	slog.Info("server starting", "addr", cfg.HTTPAddr)
 
