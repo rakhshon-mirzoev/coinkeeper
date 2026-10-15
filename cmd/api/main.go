@@ -13,6 +13,7 @@ import (
 
 	"github.com/rakhshon-mirzoev/coinkeeper/internal/config"
 	"github.com/rakhshon-mirzoev/coinkeeper/internal/httpapi"
+	"github.com/rakhshon-mirzoev/coinkeeper/internal/postgres"
 )
 
 func main() {
@@ -34,6 +35,15 @@ func run() error {
 
 	level.Set(cfg.LogLevel)
 
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	pool, err := postgres.NewPool(ctx, cfg.DBConnection)
+	if err != nil {
+		return fmt.Errorf("connect to database: %w", err)
+	}
+	defer pool.Close()
+
 	router := httpapi.NewRouter(logger)
 
 	srv := http.Server{
@@ -44,9 +54,6 @@ func run() error {
 		WriteTimeout:      10 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	errCh := make(chan error, 1)
 	go func() {
