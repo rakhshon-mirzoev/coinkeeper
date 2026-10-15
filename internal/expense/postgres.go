@@ -7,10 +7,14 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const columns = `id, user_id, amount, category, spent_at, comment, created_at, updated_at`
+
+// foreignKeyViolation — SQLSTATE ошибки внешнего ключа: user_id нет в таблице users.
+const foreignKeyViolation = "23503"
 
 type PostgresRepo struct {
 	pool *pgxpool.Pool
@@ -27,6 +31,10 @@ func (r *PostgresRepo) Create(ctx context.Context, e Expense) (Expense, error) {
 		RETURNING ` + columns
 
 	created, err := scanExpense(r.pool.QueryRow(ctx, query, e.UserID, e.Amount, e.Category, e.SpentAt, e.Comment))
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == foreignKeyViolation {
+		return Expense{}, ErrUnknownUser
+	}
 	if err != nil {
 		return Expense{}, fmt.Errorf("insert expense: %w", err)
 	}

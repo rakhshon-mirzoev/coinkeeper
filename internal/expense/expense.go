@@ -50,6 +50,7 @@ type Filter struct {
 var (
 	ErrNotFound        = errors.New("expense not found")
 	ErrInvalidUser     = errors.New("user id is required")
+	ErrUnknownUser     = errors.New("user not found")
 	ErrInvalidAmount   = errors.New("amount must be positive")
 	ErrInvalidCategory = errors.New("unknown category")
 	ErrInvalidDate     = errors.New("spent_at is required")

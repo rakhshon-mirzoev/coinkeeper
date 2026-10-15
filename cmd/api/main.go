@@ -12,8 +12,10 @@ import (
 	"time"
 
 	"github.com/rakhshon-mirzoev/coinkeeper/internal/config"
+	"github.com/rakhshon-mirzoev/coinkeeper/internal/expense"
 	"github.com/rakhshon-mirzoev/coinkeeper/internal/httpapi"
 	"github.com/rakhshon-mirzoev/coinkeeper/internal/postgres"
+	"github.com/rakhshon-mirzoev/coinkeeper/internal/user"
 )
 
 func main() {
@@ -44,7 +46,9 @@ func run() error {
 	}
 	defer pool.Close()
 
-	router := httpapi.NewRouter(logger)
+	expenses := expense.NewService(expense.NewPostgresRepo(pool))
+	users := user.NewPostgresRepo(pool)
+	router := httpapi.NewRouter(logger, expenses, users)
 
 	srv := http.Server{
 		Addr:              cfg.HTTPAddr,
