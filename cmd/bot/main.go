@@ -16,15 +16,16 @@ func main() {
 }
 
 func run() error {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	}))
+	var level slog.LevelVar
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: &level}))
 	slog.SetDefault(logger)
 
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
+
+	level.Set(cfg.LogLevel)
 
 	slog.Info("bot starting", "addr", cfg.HTTPAddr)
 

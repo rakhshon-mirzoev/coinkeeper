@@ -34,7 +34,7 @@ services:
         APP: api
     env_file: .env
     environment:
-      DB_URL: postgres://coinkeeper:coinkeeper@postgres:5432/coinkeeper?sslmode=disable
+      DATABASE_URL: postgres://coinkeeper:coinkeeper@postgres:5432/coinkeeper?sslmode=disable
     ports:
       - "8080:8080"
     depends_on:
@@ -48,7 +48,7 @@ services:
         APP: bot
     env_file: .env
     environment:
-      DB_URL: postgres://coinkeeper:coinkeeper@postgres:5432/coinkeeper?sslmode=disable
+      DATABASE_URL: postgres://coinkeeper:coinkeeper@postgres:5432/coinkeeper?sslmode=disable
     depends_on:
       migrate:
         condition: service_completed_successfully

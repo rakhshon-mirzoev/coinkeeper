@@ -2,27 +2,37 @@ package config
 
 import (
 	"errors"
+	"fmt"
+	"log/slog"
 	"os"
 )
 
 type Config struct {
 	HTTPAddr     string
 	DBConnection string
+	LogLevel     slog.Level
 }
 
-func Load() (*Config, error) {
-
-	var cfg Config
-
-	cfg.HTTPAddr = os.Getenv("HTTP_ADDR")
-	if cfg.HTTPAddr == "" {
-		return nil, errors.New("HTTP_ADDR is required")
+func Load() (Config, error) {
+	cfg := Config{
+		HTTPAddr:     getenv("HTTP_ADDR", ":8080"),
+		DBConnection: os.Getenv("DATABASE_URL"),
 	}
 
-	cfg.DBConnection = os.Getenv("DB_URL")
 	if cfg.DBConnection == "" {
-		return nil, errors.New("DB_URL is required")
+		return Config{}, errors.New("DATABASE_URL is required")
 	}
 
-	return &cfg, nil
+	if err := cfg.LogLevel.UnmarshalText([]byte(getenv("LOG_LEVEL", "info"))); err != nil {
+		return Config{}, fmt.Errorf("parse LOG_LEVEL: %w", err)
+	}
+
+	return cfg, nil
+}
+
+func getenv(k, def string) string {
+	if v, ok := os.LookupEnv(k); ok {
+		return v
+	}
+	return def
 }
