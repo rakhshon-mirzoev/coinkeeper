@@ -54,36 +54,41 @@ func (r *PostgresRepo) Get(ctx context.Context, id, ownerID int64) (Expense, err
 	return e, nil
 }
 
-func (r *PostgresRepo) List(ctx context.Context, f Filter) ([]Expense, error) {
-	var (
-		conds []string
-		args  []any
-	)
-	arg := func(v any) string {
-		args = append(args, v)
-		return fmt.Sprintf("$%d", len(args))
-	}
+// queryArgs собирает значения для плейсхолдеров $1, $2, ...
+type queryArgs []any
 
+// add добавляет значение и возвращает его плейсхолдер.
+func (a *queryArgs) add(v any) string {
+	*a = append(*a, v)
+	return fmt.Sprintf("$%d", len(*a))
+}
+
+// filterWhere строит WHERE только из заполненных полей фильтра (Limit не учитывает).
+func filterWhere(f Filter, args *queryArgs) string {
+	var conds []string
 	if f.UserID != 0 {
-		conds = append(conds, "user_id = "+arg(f.UserID))
+		conds = append(conds, "user_id = "+args.add(f.UserID))
 	}
 	if f.Category != "" {
-		conds = append(conds, "category = "+arg(f.Category))
+		conds = append(conds, "category = "+args.add(f.Category))
 	}
 	if !f.From.IsZero() {
-		conds = append(conds, "spent_at >= "+arg(f.From))
+		conds = append(conds, "spent_at >= "+args.add(f.From))
 	}
 	if !f.To.IsZero() {
-		conds = append(conds, "spent_at <= "+arg(f.To))
+		conds = append(conds, "spent_at <= "+args.add(f.To))
 	}
+	if len(conds) == 0 {
+		return ""
+	}
+	return ` WHERE ` + strings.Join(conds, " AND ")
+}
 
-	query := `SELECT ` + columns + ` FROM expenses`
-	if len(conds) > 0 {
-		query += ` WHERE ` + strings.Join(conds, " AND ")
-	}
-	query += ` ORDER BY spent_at DESC, id DESC`
+func (r *PostgresRepo) List(ctx context.Context, f Filter) ([]Expense, error) {
+	var args queryArgs
+	query := `SELECT ` + columns + ` FROM expenses` + filterWhere(f, &args) + ` ORDER BY spent_at DESC, id DESC`
 	if f.Limit > 0 {
-		query += ` LIMIT ` + arg(f.Limit)
+		query += ` LIMIT ` + args.add(f.Limit)
 	}
 
 	rows, err := r.pool.Query(ctx, query, args...)
@@ -98,6 +103,29 @@ func (r *PostgresRepo) List(ctx context.Context, f Filter) ([]Expense, error) {
 		return nil, fmt.Errorf("scan expenses: %w", err)
 	}
 	return expenses, nil
+}
+
+// Summary считает суммы по категориям в базе, а не в Go и не в LLM:
+// модели плохо складывают числа, а выгружать в контекст сотни трат дорого.
+func (r *PostgresRepo) Summary(ctx context.Context, f Filter) ([]CategoryTotal, error) {
+	var args queryArgs
+	query := `SELECT category, SUM(amount), COUNT(*) FROM expenses` + filterWhere(f, &args) +
+		` GROUP BY category ORDER BY SUM(amount) DESC`
+
+	rows, err := r.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("summarize expenses: %w", err)
+	}
+
+	totals, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (CategoryTotal, error) {
+		var t CategoryTotal
+		err := row.Scan(&t.Category, &t.Total, &t.Count)
+		return t, err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("scan summary: %w", err)
+	}
+	return totals, nil
 }
 
 func (r *PostgresRepo) Last(ctx context.Context, userID int64) (Expense, error) {

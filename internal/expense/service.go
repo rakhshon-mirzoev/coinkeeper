@@ -9,6 +9,7 @@ type Repository interface {
 	Create(ctx context.Context, e Expense) (Expense, error)
 	Get(ctx context.Context, id, ownerID int64) (Expense, error)
 	List(ctx context.Context, f Filter) ([]Expense, error)
+	Summary(ctx context.Context, f Filter) ([]CategoryTotal, error)
 	Last(ctx context.Context, userID int64) (Expense, error)
 	Update(ctx context.Context, e Expense, ownerID int64) (Expense, error)
 	Delete(ctx context.Context, id, ownerID int64) error
@@ -41,6 +42,13 @@ func (s *Service) List(ctx context.Context, f Filter) ([]Expense, error) {
 		return nil, ErrInvalidCategory
 	}
 	return s.repo.List(ctx, f)
+}
+
+func (s *Service) Summary(ctx context.Context, f Filter) ([]CategoryTotal, error) {
+	if f.Category != "" && !f.Category.Valid() {
+		return nil, ErrInvalidCategory
+	}
+	return s.repo.Summary(ctx, f)
 }
 
 func (s *Service) Last(ctx context.Context, userID int64) (Expense, error) {

@@ -36,6 +36,11 @@ func (f *fakeRepo) List(_ context.Context, flt Filter) ([]Expense, error) {
 	return nil, f.err
 }
 
+func (f *fakeRepo) Summary(_ context.Context, flt Filter) ([]CategoryTotal, error) {
+	f.called, f.filter = true, flt
+	return nil, f.err
+}
+
 func (f *fakeRepo) Last(_ context.Context, userID int64) (Expense, error) {
 	f.called = true
 	return Expense{UserID: userID}, f.err

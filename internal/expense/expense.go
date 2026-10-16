@@ -47,6 +47,13 @@ type Filter struct {
 	Limit    int
 }
 
+// CategoryTotal — итог по одной категории за период.
+type CategoryTotal struct {
+	Category Category
+	Total    decimal.Decimal
+	Count    int
+}
+
 var (
 	ErrNotFound        = errors.New("expense not found")
 	ErrInvalidUser     = errors.New("user id is required")
