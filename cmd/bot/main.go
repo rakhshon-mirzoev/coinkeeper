@@ -48,17 +48,23 @@ func run() error {
 	expenses := expense.NewService(expense.NewPostgresRepo(pool))
 	ag := agent.New(newLLM(cfg.LLM), expenses, cfg.Location, logger)
 
-	b, err := bot.New(cfg.TelegramToken, cfg.AllowedUserIDs, user.NewPostgresRepo(pool), ag, logger)
+	b, err := bot.New(cfg.TelegramToken, cfg.InviteCode, user.NewPostgresRepo(pool), ag, logger)
 	if err != nil {
 		return err
 	}
 
-	if len(cfg.AllowedUserIDs) == 0 {
-		logger.Warn("ALLOWED_USER_IDS is empty: bot is open to everyone")
+	if cfg.InviteCode == "" {
+		logger.Warn("FAMILY_INVITE_CODE is empty: bot is open to everyone")
+	}
+	// Ссылку главе семьи удобнее всего взять из лога при запуске.
+	if link, err := b.InviteLink(ctx); err != nil {
+		logger.Warn("build invite link", "error", err)
+	} else if link != "" {
+		logger.Info("family invite link", "link", link)
 	}
 	logger.Info("bot started",
 		"timezone", cfg.Location.String(),
-		"allowed_users", len(cfg.AllowedUserIDs),
+		"invite_enabled", cfg.InviteCode != "",
 		"llm_provider", cfg.LLM.Provider,
 		"llm_model", cfg.LLM.Model,
 	)

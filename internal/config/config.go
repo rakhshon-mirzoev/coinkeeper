@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strconv"
-	"strings"
+	"regexp"
 	"time"
 )
+
+var inviteCodeRe = regexp.MustCompile(`^[A-Za-z0-9_-]{8,64}$`)
 
 type Config struct {
 	HTTPAddr     string
@@ -21,8 +22,8 @@ type Bot struct {
 	Config
 
 	TelegramToken string
-	// AllowedUserIDs — Telegram ID членов семьи. Пустой список — бот открыт для всех.
-	AllowedUserIDs []int64
+	// InviteCode — код ссылки-приглашения. Пустой — бот открыт для всех.
+	InviteCode string
 	// Location — часовой пояс семьи: от него считаются «сегодня», «вчера», «этот месяц».
 	Location *time.Location
 
@@ -74,8 +75,9 @@ func LoadBot() (Bot, error) {
 		return Bot{}, errors.New("TELEGRAM_BOT_TOKEN is required")
 	}
 
-	if cfg.AllowedUserIDs, err = parseIDs(os.Getenv("ALLOWED_USER_IDS")); err != nil {
-		return Bot{}, fmt.Errorf("parse ALLOWED_USER_IDS: %w", err)
+	cfg.InviteCode = os.Getenv("FAMILY_INVITE_CODE")
+	if cfg.InviteCode != "" && !inviteCodeRe.MatchString(cfg.InviteCode) {
+		return Bot{}, errors.New("FAMILY_INVITE_CODE must be 8-64 characters: latin letters, digits, _ or -")
 	}
 
 	if cfg.Location, err = time.LoadLocation(getenv("TZ", "Europe/Moscow")); err != nil {
@@ -118,23 +120,6 @@ func loadLLM() (LLM, error) {
 		return LLM{}, errors.New("LLM_API_KEY is required")
 	}
 	return cfg, nil
-}
-
-// parseIDs разбирает список вида "123, 456".
-func parseIDs(s string) ([]int64, error) {
-	var ids []int64
-	for _, part := range strings.Split(s, ",") {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-		id, err := strconv.ParseInt(part, 10, 64)
-		if err != nil {
-			return nil, fmt.Errorf("invalid id %q", part)
-		}
-		ids = append(ids, id)
-	}
-	return ids, nil
 }
 
 func getenv(k, def string) string {

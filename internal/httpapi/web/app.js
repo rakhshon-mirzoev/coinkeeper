@@ -197,9 +197,19 @@ async function loadUsers() {
     showAlert(`Не удалось загрузить членов семьи: ${err.message}`);
   }
   const options = state.users.map((u) => [String(u.id), userName(u.id)]);
+  const selected = $("f-user").value; // при обновлении списка не сбрасываем выбранный фильтр
   fillSelect($("f-user"), options, { keepFirst: true });
+  $("f-user").value = selected;
   fillSelect($("e-user"), options);
   $("add-btn").disabled = state.users.length === 0;
+}
+
+const REFRESH_MS = 30_000;
+
+async function refresh() {
+  if (document.hidden || $("dialog").open) return; // не мешаем, пока редактируют трату
+  await loadUsers();
+  await load();
 }
 
 function applyPreset(name) {
@@ -292,6 +302,9 @@ function init() {
   $("form").addEventListener("submit", save);
 
   loadUsers().then(() => applyPreset("month"));
+
+  setInterval(refresh, REFRESH_MS);
+  document.addEventListener("visibilitychange", refresh);
 }
 
 init();

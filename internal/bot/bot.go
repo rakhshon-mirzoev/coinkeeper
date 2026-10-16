@@ -2,8 +2,10 @@ package bot
 
 import (
 	"context"
+	"crypto/subtle"
 	"fmt"
 	"log/slog"
+	"strings"
 	"unicode/utf8"
 
 	tgbot "github.com/go-telegram/bot"
@@ -17,10 +19,12 @@ import (
 const workers = 4
 
 const (
-	greeting = "Привет! Я записываю семейные траты. Просто напиши, например: «кофе 350» или «такси 1200 вчера»."
-	notText  = "Я понимаю только текстовые сообщения."
-	denied   = "Это семейный бот, у тебя нет к нему доступа."
-	failed   = "Что-то пошло не так, попробуй ещё раз."
+	greeting  = "Привет! Я записываю семейные траты. Просто напиши, например: «кофе 350» или «такси 1200 вчера»."
+	welcome   = "Добро пожаловать в семью! " + greeting
+	notText   = "Я понимаю только текстовые сообщения."
+	needCode  = "Это семейный бот. Чтобы пользоваться им, попроси у главы семьи ссылку-приглашение."
+	wrongCode = "Неверная ссылка-приглашение. Попроси у главы семьи новую."
+	failed    = "Что-то пошло не так, попробуй ещё раз."
 )
 
 // Agent понимает сообщение пользователя и возвращает ответ.
@@ -29,30 +33,25 @@ type Agent interface {
 	Reply(ctx context.Context, userID int64, text string) (string, error)
 }
 
-type UserSaver interface {
+// UserStore — члены семьи. Кто есть в хранилище, тот член семьи.
+type UserStore interface {
 	Upsert(ctx context.Context, u user.User) error
+	Exists(ctx context.Context, id int64) (bool, error)
 }
 
 type Bot struct {
-	api     *tgbot.Bot
-	agent   Agent
-	users   UserSaver
-	allowed map[int64]bool
-	log     *slog.Logger
+	api   *tgbot.Bot
+	agent Agent
+	users UserStore
+	// inviteCode — код ссылки t.me/<бот>?start=<код>. Пустой — бот открыт для всех,
+	// иначе пользоваться им могут только пришедшие по ссылке.
+	inviteCode string
+	log        *slog.Logger
 }
 
 // New подключается к Telegram и проверяет токен (запрос getMe).
-// allowedIDs пустой — бот отвечает всем.
-func New(token string, allowedIDs []int64, users UserSaver, agent Agent, log *slog.Logger) (*Bot, error) {
-	b := &Bot{
-		agent:   agent,
-		users:   users,
-		allowed: make(map[int64]bool, len(allowedIDs)),
-		log:     log,
-	}
-	for _, id := range allowedIDs {
-		b.allowed[id] = true
-	}
+func New(token, inviteCode string, users UserStore, agent Agent, log *slog.Logger) (*Bot, error) {
+	b := newBot(inviteCode, users, agent, log)
 
 	api, err := tgbot.New(token,
 		tgbot.WithDefaultHandler(b.handle),
@@ -66,6 +65,22 @@ func New(token string, allowedIDs []int64, users UserSaver, agent Agent, log *sl
 	}
 	b.api = api
 	return b, nil
+}
+
+func newBot(inviteCode string, users UserStore, agent Agent, log *slog.Logger) *Bot {
+	return &Bot{agent: agent, users: users, inviteCode: inviteCode, log: log}
+}
+
+// InviteLink — ссылка-приглашение для семейного чата. Пустая, если код не задан.
+func (b *Bot) InviteLink(ctx context.Context) (string, error) {
+	if b.inviteCode == "" {
+		return "", nil
+	}
+	me, err := b.api.GetMe(ctx)
+	if err != nil {
+		return "", fmt.Errorf("get bot info: %w", err)
+	}
+	return fmt.Sprintf("https://t.me/%s?start=%s", me.Username, b.inviteCode), nil
 }
 
 // Run опрашивает Telegram (long polling) и блокируется, пока не отменят ctx.
@@ -85,23 +100,41 @@ func (b *Bot) handle(ctx context.Context, _ *tgbot.Bot, upd *models.Update) {
 	log := b.log.With("user_id", from.ID)
 	log.Debug("message received", "text_len", utf8.RuneCountInString(msg.Text))
 
-	if !b.isAllowed(from.ID) {
-		log.Warn("access denied")
-		b.send(ctx, msg.Chat.ID, denied)
+	verdict, err := b.checkAccess(ctx, from.ID, msg.Text)
+	if err != nil {
+		log.Error("check access", "error", err)
+		b.send(ctx, msg.Chat.ID, failed)
 		return
 	}
+	switch verdict {
+	case accessDenied:
+		log.Warn("access denied")
+		b.send(ctx, msg.Chat.ID, needCode)
+		return
+	case accessWrongCode:
+		log.Warn("wrong invite code")
+		b.send(ctx, msg.Chat.ID, wrongCode)
+		return
+	}
+
 	if msg.Text == "" {
 		b.send(ctx, msg.Chat.ID, notText)
 		return
 	}
 
+	// Регистрируем при каждом сообщении: заодно обновляется имя, если его сменили в Telegram.
 	if err := b.users.Upsert(ctx, toUser(from)); err != nil {
 		log.Error("save user", "error", err)
 		b.send(ctx, msg.Chat.ID, failed)
 		return
 	}
 
-	if msg.Text == "/start" {
+	if verdict == accessJoined {
+		log.Info("joined family by invite")
+		b.send(ctx, msg.Chat.ID, welcome)
+		return
+	}
+	if isStart(msg.Text) {
 		b.send(ctx, msg.Chat.ID, greeting)
 		return
 	}
@@ -121,8 +154,54 @@ func (b *Bot) handle(ctx context.Context, _ *tgbot.Bot, upd *models.Update) {
 	b.send(ctx, msg.Chat.ID, reply)
 }
 
-func (b *Bot) isAllowed(userID int64) bool {
-	return len(b.allowed) == 0 || b.allowed[userID]
+type accessVerdict int
+
+const (
+	accessGranted   accessVerdict = iota // уже член семьи или бот открыт
+	accessJoined                         // пришёл по верной ссылке-приглашению
+	accessWrongCode                      // пришёл по ссылке с неверным кодом
+	accessDenied
+)
+
+// checkAccess решает, можно ли пользователю работать с ботом.
+func (b *Bot) checkAccess(ctx context.Context, userID int64, text string) (accessVerdict, error) {
+	if b.inviteCode == "" {
+		return accessGranted, nil // приглашения выключены — бот открыт
+	}
+
+	member, err := b.users.Exists(ctx, userID)
+	if err != nil {
+		return 0, err
+	}
+	if member {
+		return accessGranted, nil
+	}
+
+	code, ok := startPayload(text)
+	if !ok || code == "" {
+		return accessDenied, nil
+	}
+
+	if subtle.ConstantTimeCompare([]byte(code), []byte(b.inviteCode)) == 1 {
+		return accessJoined, nil
+	}
+	return accessWrongCode, nil
+}
+
+
+func startPayload(text string) (string, bool) {
+	if !isStart(text) {
+		return "", false
+	}
+	_, payload, _ := strings.Cut(strings.TrimSpace(text), " ")
+	return strings.TrimSpace(payload), true
+}
+
+// isStart узнаёт команду /start, в том числе с упоминанием бота: /start@my_bot.
+func isStart(text string) bool {
+	cmd, _, _ := strings.Cut(strings.TrimSpace(text), " ")
+	cmd, _, _ = strings.Cut(cmd, "@")
+	return cmd == "/start"
 }
 
 func (b *Bot) send(ctx context.Context, chatID int64, text string) {
