@@ -46,8 +46,7 @@ func run() error {
 	defer pool.Close()
 
 	expenses := expense.NewService(expense.NewPostgresRepo(pool))
-	llm := agent.NewAnthropic(cfg.AnthropicAPIKey, cfg.LLMModel, cfg.LLMEffort)
-	ag := agent.New(llm, expenses, cfg.Location, logger)
+	ag := agent.New(newLLM(cfg.LLM), expenses, cfg.Location, logger)
 
 	b, err := bot.New(cfg.TelegramToken, cfg.AllowedUserIDs, user.NewPostgresRepo(pool), ag, logger)
 	if err != nil {
@@ -60,11 +59,19 @@ func run() error {
 	logger.Info("bot started",
 		"timezone", cfg.Location.String(),
 		"allowed_users", len(cfg.AllowedUserIDs),
-		"model", cfg.LLMModel,
+		"llm_provider", cfg.LLM.Provider,
+		"llm_model", cfg.LLM.Model,
 	)
 
-	b.Run(ctx) // блокируется до Ctrl+C / docker stop
+	b.Run(ctx)
 
 	logger.Info("bot stopped")
 	return nil
+}
+
+func newLLM(cfg config.LLM) agent.LLM {
+	if cfg.Provider == config.ProviderAnthropic {
+		return agent.NewAnthropic(cfg.APIKey, cfg.Model, cfg.Effort)
+	}
+	return agent.NewOpenAI(cfg.BaseURL, cfg.APIKey, cfg.Model)
 }

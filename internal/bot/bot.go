@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"unicode/utf8"
 
 	tgbot "github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -82,8 +83,7 @@ func (b *Bot) handle(ctx context.Context, _ *tgbot.Bot, upd *models.Update) {
 
 	from := msg.From
 	log := b.log.With("user_id", from.ID)
-	// Текст не пишем: это личные данные. Длины хватает, чтобы видеть, что сообщение дошло.
-	log.Debug("message received", "text_len", len(msg.Text))
+	log.Debug("message received", "text_len", utf8.RuneCountInString(msg.Text))
 
 	if !b.isAllowed(from.ID) {
 		log.Warn("access denied")

@@ -26,10 +26,21 @@ type Bot struct {
 	// Location — часовой пояс семьи: от него считаются «сегодня», «вчера», «этот месяц».
 	Location *time.Location
 
-	AnthropicAPIKey string
-	LLMModel        string
-	// LLMEffort — насколько глубоко модель думает: low, medium, high. Пусто — по умолчанию модели.
-	LLMEffort string
+	LLM LLM
+}
+
+const (
+	ProviderOpenAI    = "openai"
+	ProviderAnthropic = "anthropic"
+)
+
+// LLM — доступ к языковой модели.
+type LLM struct {
+	Provider string
+	BaseURL  string
+	APIKey   string
+	Model    string
+	Effort   string
 }
 
 func Load() (Config, error) {
@@ -71,13 +82,41 @@ func LoadBot() (Bot, error) {
 		return Bot{}, fmt.Errorf("parse TZ: %w", err)
 	}
 
-	cfg.AnthropicAPIKey = os.Getenv("ANTHROPIC_API_KEY")
-	if cfg.AnthropicAPIKey == "" {
-		return Bot{}, errors.New("ANTHROPIC_API_KEY is required")
+	if cfg.LLM, err = loadLLM(); err != nil {
+		return Bot{}, err
 	}
-	cfg.LLMModel = getenv("LLM_MODEL", "claude-opus-5-5")
-	cfg.LLMEffort = getenv("LLM_EFFORT", "medium")
 
+	return cfg, nil
+}
+
+func loadLLM() (LLM, error) {
+	cfg := LLM{
+		Provider: getenv("LLM_PROVIDER", ProviderOpenAI),
+		BaseURL:  getenv("LLM_BASE_URL", "https://openrouter.ai/api/v1"),
+		APIKey:   os.Getenv("LLM_API_KEY"),
+		Model:    os.Getenv("LLM_MODEL"),
+		Effort:   os.Getenv("LLM_EFFORT"),
+	}
+
+	switch cfg.Provider {
+	case ProviderOpenAI:
+		if cfg.Model == "" {
+			return LLM{}, errors.New("LLM_MODEL is required")
+		}
+	case ProviderAnthropic:
+		if cfg.Model == "" {
+			cfg.Model = "claude-opus-5-5"
+		}
+		if cfg.Effort == "" {
+			cfg.Effort = "medium"
+		}
+	default:
+		return LLM{}, fmt.Errorf("unknown LLM_PROVIDER %q, expected %s or %s", cfg.Provider, ProviderOpenAI, ProviderAnthropic)
+	}
+
+	if cfg.APIKey == "" {
+		return LLM{}, errors.New("LLM_API_KEY is required")
+	}
 	return cfg, nil
 }
 
