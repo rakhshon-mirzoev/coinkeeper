@@ -24,6 +24,21 @@ func NewPostgresRepo(pool *pgxpool.Pool) *PostgresRepo {
 	return &PostgresRepo{pool: pool}
 }
 
+// Upsert регистрирует пользователя при первом сообщении и обновляет имя,
+// если он поменял его в Telegram.
+func (r *PostgresRepo) Upsert(ctx context.Context, u User) error {
+	query := `
+		INSERT INTO users (id, first_name, username)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (id) DO UPDATE
+		SET first_name = EXCLUDED.first_name, username = EXCLUDED.username`
+
+	if _, err := r.pool.Exec(ctx, query, u.ID, u.FirstName, u.Username); err != nil {
+		return fmt.Errorf("upsert user: %w", err)
+	}
+	return nil
+}
+
 func (r *PostgresRepo) List(ctx context.Context) ([]User, error) {
 	rows, err := r.pool.Query(ctx, `SELECT id, first_name, username, created_at FROM users ORDER BY first_name, id`)
 	if err != nil {
