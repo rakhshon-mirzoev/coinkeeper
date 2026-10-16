@@ -27,6 +27,8 @@ func NewRouter(log *slog.Logger, expenses ExpenseService, users UserLister) http
 
 	mux.HandleFunc("GET /users", uh.list)
 
+	mux.Handle("GET /", webHandler())
+
 	return recoverPanic(log, logRequests(log, cors(mux)))
 }
 

@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CoinKeeper — расходы семьи</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>CoinKeeper</h1>
+      <p class="subtitle">Расходы семьи</p>
+    </div>
+    <button type="button" class="btn btn-primary" id="add-btn">Добавить трату</button>
+  </header>
+
+  <main>
+    <section class="filters" aria-label="Фильтры">
+      <label class="field">
+        <span>Член семьи</span>
+        <select id="f-user"><option value="">Все</option></select>
+      </label>
+      <label class="field">
+        <span>Категория</span>
+        <select id="f-category"><option value="">Все</option></select>
+      </label>
+      <label class="field">
+        <span>С</span>
+        <input type="date" id="f-from">
+      </label>
+      <label class="field">
+        <span>По</span>
+        <input type="date" id="f-to">
+      </label>
+      <div class="presets" role="group" aria-label="Быстрый выбор периода">
+        <button type="button" class="chip" data-preset="week">Неделя</button>
+        <button type="button" class="chip" data-preset="month">Этот месяц</button>
+        <button type="button" class="chip" data-preset="prev-month">Прошлый месяц</button>
+        <button type="button" class="chip" data-preset="all">Всё время</button>
+      </div>
+    </section>
+
+    <div class="alert" id="alert" role="alert" hidden></div>
+
+    <section class="summary" aria-live="polite">
+      <div class="total">
+        <span class="total-label">Итого</span>
+        <span class="total-value" id="total">—</span>
+        <span class="total-count" id="count"></span>
+      </div>
+      <ul class="by-category" id="by-category"></ul>
+    </section>
+
+    <section class="card">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Дата</th>
+            <th>Член семьи</th>
+            <th>Категория</th>
+            <th>Комментарий</th>
+            <th class="num">Сумма</th>
+            <th><span class="visually-hidden">Действия</span></th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <p class="empty" id="empty" hidden></p>
+    </section>
+  </main>
+
+  <dialog id="dialog">
+    <form id="form" method="dialog">
+      <h2 id="form-title">Новая трата</h2>
+      <label class="field">
+        <span>Член семьи</span>
+        <select id="e-user" required></select>
+      </label>
+      <div class="row">
+        <label class="field">
+          <span>Сумма, ₽</span>
+          <input type="number" id="e-amount" min="0.01" step="0.01" inputmode="decimal" required>
+        </label>
+        <label class="field">
+          <span>Дата</span>
+          <input type="date" id="e-date" required>
+        </label>
+      </div>
+      <label class="field">
+        <span>Категория</span>
+        <select id="e-category" required></select>
+      </label>
+      <label class="field">
+        <span>Комментарий</span>
+        <input type="text" id="e-comment" maxlength="200" placeholder="например, кофе">
+      </label>
+      <p class="form-error" id="form-error" role="alert" hidden></p>
+      <div class="actions">
+        <button type="button" class="btn" id="cancel-btn">Отмена</button>
+        <button type="submit" class="btn btn-primary" id="save-btn">Сохранить</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/app.js"></script>
+</body>
+</html>
