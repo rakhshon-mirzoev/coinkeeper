@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
+	pgxdecimal "github.com/jackc/pgx-shopspring-decimal"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	pgxdecimal "github.com/jackc/pgx-shopspring-decimal"
 )
 
 const pingTimeout = 5 * time.Second

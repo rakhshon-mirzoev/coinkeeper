@@ -58,7 +58,9 @@ var (
 	ErrNotFound        = errors.New("expense not found")
 	ErrInvalidUser     = errors.New("user id is required")
 	ErrUnknownUser     = errors.New("user not found")
-	ErrInvalidAmount   = errors.New("amount must be positive")
+	ErrInvalidAmount   = errors.New("amount must be from 0.01 to 9999999999.99 with at most 2 decimal places")
 	ErrInvalidCategory = errors.New("unknown category")
 	ErrInvalidDate     = errors.New("spent_at is required")
 )
+
+var maxAmount = decimal.RequireFromString("9999999999.99")

@@ -71,7 +71,9 @@ func (s *Service) Delete(ctx context.Context, id, ownerID int64) error {
 
 // пустая строка хранится как null
 func validate(e *Expense) error {
-	if !e.Amount.IsPositive() {
+	// Колонка numeric(12,2): больше двух знаков после запятой Postgres молча
+	// округлит (0.001 → 0.00), а больше 10 цифр до запятой не поместятся.
+	if !e.Amount.IsPositive() || !e.Amount.Equal(e.Amount.Round(2)) || e.Amount.GreaterThan(maxAmount) {
 		return ErrInvalidAmount
 	}
 	if !e.Category.Valid() {
