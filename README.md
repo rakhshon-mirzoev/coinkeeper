@@ -42,6 +42,35 @@ curl http://localhost:8080/health
 
 Бот и панель работают с одной базой: траты, записанные в Telegram, сразу видны в панели. Член семьи появляется в фильтре после первого сообщения боту.
 
+## Как проверить по ТЗ
+
+После быстрого старта: бот — ваш бот в Telegram, панель — http://localhost:8080.
+
+| Требование | Как проверить вручную | Где в коде и тестах |
+|---|---|---|
+| Трата: id, user_id (Telegram ID), amount, category, spent_at, comment, created_at, updated_at | `docker compose exec postgres psql -U coinkeeper -c '\d expenses'` | [migrations/0001_init.sql](migrations/0001_init.sql) |
+| Бот добавляет трату: «кофе 350», «такси 1200 вчера» | Написать боту; в панели появится трата с сегодняшней и вчерашней датой | `add_expense` в [tools.go](internal/agent/tools.go); `TestReply_AddExpense`, `TestReply_ExplicitDate`; eval `add-*` |
+| Бот показывает: «сколько потратил на еду в этом месяце», «покажи траты за неделю» | Написать боту; сверить сумму с итогом в панели за тот же период | `get_summary` (сумма в SQL), `list_expenses`; `TestReply_SummaryIsCountedInCode`; eval `sum-*`, `list-week` |
+| Бот изменяет: «последнее было не 350, а 450» | Написать боту; в панели у последней траты новая сумма | `last_expense` → `update_expense`; `TestReply_UpdateLast`; eval `update-*` |
+| Бот удаляет: «удали такси» | Написать боту; если подходят несколько трат, бот переспросит, какую | `list_expenses` → `delete_expense`; eval `delete-*`, `delete-ambiguous` |
+| Без кнопок и команд | Только обычный текст; `/start` лишь приветствует | [bot.go](internal/bot/bot.go) |
+| Каждому доступны только его траты, чужие недоступны | Со второго аккаунта: «покажи траты», «удали трату N», где N — ID чужой траты из панели. Бот её не найдёт | `user_id` подставляет код, у инструментов нет такого параметра; условие `user_id` в SQL в [postgres.go](internal/expense/postgres.go); `TestReply_CannotTouchOtherUsersExpense`; eval `foreign-delete`, `foreign-leak` |
+| Панель показывает траты всех членов семьи | Написать боту с двух аккаунтов — в панели траты обоих | [internal/httpapi/web](internal/httpapi/web) |
+| Фильтр по члену семьи, периоду и категории | Фильтры и кнопки периодов над таблицей; итог пересчитывается | `GET /expenses?user_id=&from=&to=&category=` |
+| Создание, редактирование, удаление в панели | «Добавить трату», «Изменить», «Удалить» | `POST`, `PATCH`, `DELETE /expenses` |
+| Панель работает через REST API | DevTools → Network или `curl` из раздела [API](#api) | [internal/httpapi](internal/httpapi) |
+| Авторизация панели не нужна | Панель открывается без входа | — |
+| Бэкенд на Go, фронтенд на любом стеке | — | Go; панель — HTML, CSS, JS без сборки, встроена в бинарник `api` |
+| Запуск со всеми зависимостями через один `docker compose` | `cp .env.example .env`, вписать два ключа, `docker compose up --build` | [docker-compose.yml](docker-compose.yml): postgres, migrate, api, bot |
+| Доступ к LLM через конфиг | Поменять `LLM_PROVIDER`, `LLM_BASE_URL`, `LLM_MODEL` в `.env` и пересоздать бота: `docker compose up -d bot` | [config.go](internal/config/config.go); `TestOpenAI_*`, `TestAnthropic_*` |
+
+Автоматические проверки:
+
+```bash
+make test   # юнит-тесты: без базы и без ключей LLM
+make eval   # eval агента на настоящей LLM, нужен LLM_API_KEY
+```
+
 ## Конфигурация
 
 Все настройки — через переменные окружения (`.env` для локального запуска, пример в `.env.example`).
