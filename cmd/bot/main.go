@@ -46,7 +46,8 @@ func run() error {
 	defer pool.Close()
 
 	expenses := expense.NewService(expense.NewPostgresRepo(pool))
-	ag := agent.New(newLLM(cfg.LLM), expenses, cfg.Location, logger)
+	llm := agent.NewOpenAI(cfg.LLM.BaseURL, cfg.LLM.APIKey, cfg.LLM.Model)
+	ag := agent.New(llm, expenses, cfg.Location, logger)
 
 	b, err := bot.New(cfg.TelegramToken, user.NewPostgresRepo(pool), ag, logger)
 	if err != nil {
@@ -55,7 +56,7 @@ func run() error {
 
 	logger.Info("bot started",
 		"timezone", cfg.Location.String(),
-		"llm_provider", cfg.LLM.Provider,
+		"llm_base_url", cfg.LLM.BaseURL,
 		"llm_model", cfg.LLM.Model,
 	)
 
@@ -63,11 +64,4 @@ func run() error {
 
 	logger.Info("bot stopped")
 	return nil
-}
-
-func newLLM(cfg config.LLM) agent.LLM {
-	if cfg.Provider == config.ProviderAnthropic {
-		return agent.NewAnthropic(cfg.APIKey, cfg.Model, cfg.Effort)
-	}
-	return agent.NewOpenAI(cfg.BaseURL, cfg.APIKey, cfg.Model)
 }

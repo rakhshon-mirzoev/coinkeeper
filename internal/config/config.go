@@ -25,18 +25,12 @@ type Bot struct {
 	LLM LLM
 }
 
-const (
-	ProviderOpenAI    = "openai"
-	ProviderAnthropic = "anthropic"
-)
-
-// LLM — доступ к языковой модели.
+// LLM — доступ к языковой модели через OpenAI-совместимый API:
+// OpenRouter, Cloud.ru, OpenAI, Ollama — отличаются только адресом и ключом.
 type LLM struct {
-	Provider string
-	BaseURL  string
-	APIKey   string
-	Model    string
-	Effort   string
+	BaseURL string
+	APIKey  string
+	Model   string
 }
 
 func Load() (Config, error) {
@@ -83,31 +77,16 @@ func LoadBot() (Bot, error) {
 
 func loadLLM() (LLM, error) {
 	cfg := LLM{
-		Provider: getenv("LLM_PROVIDER", ProviderOpenAI),
-		BaseURL:  getenv("LLM_BASE_URL", "https://openrouter.ai/api/v1"),
-		APIKey:   os.Getenv("LLM_API_KEY"),
-		Model:    os.Getenv("LLM_MODEL"),
-		Effort:   os.Getenv("LLM_EFFORT"),
+		BaseURL: getenv("LLM_BASE_URL", "https://openrouter.ai/api/v1"),
+		APIKey:  os.Getenv("LLM_API_KEY"),
+		Model:   os.Getenv("LLM_MODEL"),
 	}
-
-	switch cfg.Provider {
-	case ProviderOpenAI:
-		if cfg.Model == "" {
-			return LLM{}, errors.New("LLM_MODEL is required")
-		}
-	case ProviderAnthropic:
-		if cfg.Model == "" {
-			cfg.Model = "claude-opus-5-5"
-		}
-		if cfg.Effort == "" {
-			cfg.Effort = "medium"
-		}
-	default:
-		return LLM{}, fmt.Errorf("unknown LLM_PROVIDER %q, expected %s or %s", cfg.Provider, ProviderOpenAI, ProviderAnthropic)
-	}
-
 	if cfg.APIKey == "" {
 		return LLM{}, errors.New("LLM_API_KEY is required")
+	}
+	// Список бесплатных моделей постоянно меняется, поэтому модель задаётся явно.
+	if cfg.Model == "" {
+		return LLM{}, errors.New("LLM_MODEL is required")
 	}
 	return cfg, nil
 }

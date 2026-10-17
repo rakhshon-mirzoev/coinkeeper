@@ -230,6 +230,7 @@ func TestReply_ToolErrorsGoBackToModel(t *testing.T) {
 		{"unknown tool", toolCall("c1", "drop_database", `{}`), "unknown tool"},
 		{"bad date", toolCall("c1", "add_expense", `{"amount":1,"category":"food","date":"вчера"}`), "invalid date"},
 		{"zero amount", toolCall("c1", "add_expense", `{"amount":0,"category":"food"}`), expense.ErrInvalidAmount.Error()},
+		{"future date", toolCall("c1", "add_expense", `{"amount":500,"category":"transport","date":"2026-10-17"}`), "in the future"},
 		{"bad category", toolCall("c1", "add_expense", `{"amount":1,"category":"еда"}`), expense.ErrInvalidCategory.Error()},
 	}
 
@@ -268,6 +269,27 @@ func TestReply_UpdateLast(t *testing.T) {
 	}
 	if got := svc.items[1]; !got.Amount.Equal(decimal.NewFromInt(450)) || got.Category != expense.CategoryFood {
 		t.Errorf("expense after update = %+v", got)
+	}
+}
+
+func TestReply_UpdateRejectsFutureDate(t *testing.T) {
+	svc := newMemService()
+	_, _ = svc.Create(context.Background(), expense.Expense{
+		UserID: me, Amount: decimal.NewFromInt(350), Category: expense.CategoryFood, SpentAt: fixedNow,
+	})
+	llm := &scriptedLLM{responses: []Response{
+		toolCall("c1", "update_expense", `{"id":1,"date":"2026-12-31"}`),
+		text("Дата в будущем."),
+	}}
+
+	if _, err := newTestAgent(llm, svc).Reply(context.Background(), me, "перенеси на 31 декабря"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res := lastToolResult(t, llm); !res.IsError || !strings.Contains(res.Content, "in the future") {
+		t.Errorf("tool result = %+v, want future date error", res)
+	}
+	if got := svc.items[1].SpentAt; !got.Equal(fixedNow) {
+		t.Errorf("date changed to %s", got)
 	}
 }
 

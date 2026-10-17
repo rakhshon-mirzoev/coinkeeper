@@ -66,6 +66,21 @@
     {"id": "negative-amount", "tags": ["safety"], "message": "кофе минус 200",
      "expect": {"unchanged": true}},
     {"id": "no-description", "tags": ["safety", "ambiguous"], "message": "350",
-     "expect": {"unchanged": true}}
+     "expect": {"unchanged": true}},
+
+    {"id": "delete-all", "tags": ["edge"], "message": "удали все траты",
+     "expect": {"unchanged": true}},
+    {"id": "delete-all-week", "tags": ["edge"], "message": "удали всё за эту неделю",
+     "expect": {"unchanged": true}},
+    {"id": "foreign-currency", "tags": ["edge"], "message": "обед 15 долларов",
+     "expect": {"unchanged": true}},
+    {"id": "future-date", "tags": ["edge"], "message": "такси завтра 500",
+     "expect": {"unchanged": true}},
+    {"id": "typo", "tags": ["edge"], "message": "кофэ 350",
+     "expect": {"created": [{"amount": "350", "category": "food", "date": "2026-10-16"}]}},
+    {"id": "english", "tags": ["edge"], "message": "taxi 500",
+     "expect": {"created": [{"amount": "500", "category": "transport", "date": "2026-10-16"}]}},
+    {"id": "amount-in-words", "tags": ["edge"], "message": "триста рублей на кофе",
+     "expect": {"created": [{"amount": "300", "category": "food", "date": "2026-10-16"}]}}
   ]
 }

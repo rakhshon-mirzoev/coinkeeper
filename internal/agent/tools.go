@@ -202,7 +202,7 @@ func (t *toolbox) add(ctx context.Context, userID int64, raw json.RawMessage) (a
 	spentAt := t.today()
 	if in.Date != "" {
 		var err error
-		if spentAt, err = t.parseDate(in.Date); err != nil {
+		if spentAt, err = t.parseSpentAt(in.Date); err != nil {
 			return nil, err
 		}
 	}
@@ -329,7 +329,7 @@ func (t *toolbox) update(ctx context.Context, userID int64, raw json.RawMessage)
 		e.Category = *in.Category
 	}
 	if in.Date != nil {
-		if e.SpentAt, err = t.parseDate(*in.Date); err != nil {
+		if e.SpentAt, err = t.parseSpentAt(*in.Date); err != nil {
 			return nil, err
 		}
 	}
@@ -390,6 +390,19 @@ func (t *toolbox) parseDate(s string) (time.Time, error) {
 	d, err := time.ParseInLocation(time.DateOnly, s, t.loc)
 	if err != nil {
 		return time.Time{}, toolErrorf("invalid date %q, expected YYYY-MM-DD", s)
+	}
+	return d, nil
+}
+
+// parseSpentAt — дата траты: как parseDate, но не в будущем. Правило есть и в промпте,
+// а здесь его гарантирует код — даже если модель запишет «завтра» датой.
+func (t *toolbox) parseSpentAt(s string) (time.Time, error) {
+	d, err := t.parseDate(s)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if d.After(t.today()) {
+		return time.Time{}, toolErrorf("date %s is in the future, ask the user for the actual date", s)
 	}
 	return d, nil
 }

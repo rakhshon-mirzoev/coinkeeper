@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,6 +18,9 @@ const (
 	openAIRetries   = 2
 	openAIRetryWait = 2 * time.Second
 )
+
+// errTruncated — ответ модели обрезан по лимиту токенов (finish_reason=length).
+var errTruncated = errors.New("llm response truncated by max_tokens")
 
 // OpenAI — реализация LLM для OpenAI-совместимого Chat Completions API:
 // OpenRouter, Cloud.ru, OpenAI, локальные Ollama/vLLM. Отличаются только адрес и ключ.

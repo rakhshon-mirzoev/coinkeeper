@@ -383,9 +383,6 @@ func runCase(t *testing.T, model, apiKey string, file evalFile, c evalCase, rep 
 }
 
 func newEvalLLM(model, apiKey string) LLM {
-	if os.Getenv("LLM_PROVIDER") == "anthropic" {
-		return NewAnthropic(apiKey, model, envOr("LLM_EFFORT", "medium"))
-	}
 	return NewOpenAI(envOr("LLM_BASE_URL", "https://openrouter.ai/api/v1"), apiKey, model)
 }
 
