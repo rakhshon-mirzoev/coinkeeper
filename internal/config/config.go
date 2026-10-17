@@ -5,11 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"regexp"
 	"time"
 )
-
-var inviteCodeRe = regexp.MustCompile(`^[A-Za-z0-9_-]{8,64}$`)
 
 type Config struct {
 	HTTPAddr     string
@@ -22,8 +19,6 @@ type Bot struct {
 	Config
 
 	TelegramToken string
-	// InviteCode — код ссылки-приглашения. Пустой — бот открыт для всех.
-	InviteCode string
 	// Location — часовой пояс семьи: от него считаются «сегодня», «вчера», «этот месяц».
 	Location *time.Location
 
@@ -73,11 +68,6 @@ func LoadBot() (Bot, error) {
 	}
 	if cfg.TelegramToken == "" {
 		return Bot{}, errors.New("TELEGRAM_BOT_TOKEN is required")
-	}
-
-	cfg.InviteCode = os.Getenv("FAMILY_INVITE_CODE")
-	if cfg.InviteCode != "" && !inviteCodeRe.MatchString(cfg.InviteCode) {
-		return Bot{}, errors.New("FAMILY_INVITE_CODE must be 8-64 characters: latin letters, digits, _ or -")
 	}
 
 	if cfg.Location, err = time.LoadLocation(getenv("TZ", "Europe/Moscow")); err != nil {

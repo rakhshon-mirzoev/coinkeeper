@@ -2,7 +2,6 @@ package bot
 
 import (
 	"context"
-	"crypto/subtle"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -28,12 +27,9 @@ const (
 )
 
 const (
-	greeting  = "Привет! Я записываю семейные траты. Просто напиши, например: «кофе 350» или «такси 1200 вчера»."
-	welcome   = "Добро пожаловать в семью! " + greeting
-	notText   = "Я понимаю только текстовые сообщения."
-	needCode  = "Это семейный бот. Чтобы пользоваться им, попроси у главы семьи ссылку-приглашение."
-	wrongCode = "Неверная ссылка-приглашение. Попроси у главы семьи новую."
-	failed    = "Что-то пошло не так, попробуй ещё раз."
+	greeting = "Привет! Я записываю семейные траты. Просто напиши, например: «кофе 350» или «такси 1200 вчера»."
+	notText  = "Я понимаю только текстовые сообщения."
+	failed   = "Что-то пошло не так, попробуй ещё раз."
 )
 
 // Agent понимает сообщение пользователя и возвращает ответ.
@@ -42,25 +38,21 @@ type Agent interface {
 	Reply(ctx context.Context, userID int64, text string) (string, error)
 }
 
-// UserStore — члены семьи. Кто есть в хранилище, тот член семьи.
-type UserStore interface {
+// UserSaver регистрирует членов семьи: кто написал боту, тот и член семьи.
+type UserSaver interface {
 	Upsert(ctx context.Context, u user.User) error
-	Exists(ctx context.Context, id int64) (bool, error)
 }
 
 type Bot struct {
 	api   *tgbot.Bot
 	agent Agent
-	users UserStore
-	// inviteCode — код ссылки t.me/<бот>?start=<код>. Пустой — бот открыт для всех,
-	// иначе пользоваться им могут только пришедшие по ссылке.
-	inviteCode string
-	log        *slog.Logger
+	users UserSaver
+	log   *slog.Logger
 }
 
 // New подключается к Telegram и проверяет токен (запрос getMe).
-func New(token, inviteCode string, users UserStore, agent Agent, log *slog.Logger) (*Bot, error) {
-	b := newBot(inviteCode, users, agent, log)
+func New(token string, users UserSaver, agent Agent, log *slog.Logger) (*Bot, error) {
+	b := &Bot{agent: agent, users: users, log: log}
 
 	api, err := tgbot.New(token,
 		tgbot.WithDefaultHandler(b.handle),
@@ -78,22 +70,6 @@ func New(token, inviteCode string, users UserStore, agent Agent, log *slog.Logge
 	}
 	b.api = api
 	return b, nil
-}
-
-func newBot(inviteCode string, users UserStore, agent Agent, log *slog.Logger) *Bot {
-	return &Bot{agent: agent, users: users, inviteCode: inviteCode, log: log}
-}
-
-// InviteLink — ссылка-приглашение для семейного чата. Пустая, если код не задан.
-func (b *Bot) InviteLink(ctx context.Context) (string, error) {
-	if b.inviteCode == "" {
-		return "", nil
-	}
-	me, err := b.api.GetMe(ctx)
-	if err != nil {
-		return "", fmt.Errorf("get bot info: %w", err)
-	}
-	return fmt.Sprintf("https://t.me/%s?start=%s", me.Username, b.inviteCode), nil
 }
 
 // Run опрашивает Telegram (long polling) и блокируется, пока не отменят ctx
@@ -119,23 +95,6 @@ func (b *Bot) handle(runCtx context.Context, _ *tgbot.Bot, upd *models.Update) {
 	log := b.log.With("user_id", from.ID)
 	log.Debug("message received", "text_len", utf8.RuneCountInString(msg.Text))
 
-	verdict, err := b.checkAccess(ctx, from.ID, msg.Text)
-	if err != nil {
-		log.Error("check access", "error", err)
-		b.send(ctx, msg.Chat.ID, failed)
-		return
-	}
-	switch verdict {
-	case accessDenied:
-		log.Warn("access denied")
-		b.send(ctx, msg.Chat.ID, needCode)
-		return
-	case accessWrongCode:
-		log.Warn("wrong invite code")
-		b.send(ctx, msg.Chat.ID, wrongCode)
-		return
-	}
-
 	if msg.Text == "" {
 		b.send(ctx, msg.Chat.ID, notText)
 		return
@@ -148,11 +107,6 @@ func (b *Bot) handle(runCtx context.Context, _ *tgbot.Bot, upd *models.Update) {
 		return
 	}
 
-	if verdict == accessJoined {
-		log.Info("joined family by invite")
-		b.send(ctx, msg.Chat.ID, welcome)
-		return
-	}
 	if isStart(msg.Text) {
 		b.send(ctx, msg.Chat.ID, greeting)
 		return
@@ -167,48 +121,6 @@ func (b *Bot) handle(runCtx context.Context, _ *tgbot.Bot, upd *models.Update) {
 		return
 	}
 	b.send(ctx, msg.Chat.ID, reply)
-}
-
-type accessVerdict int
-
-const (
-	accessGranted   accessVerdict = iota // уже член семьи или бот открыт
-	accessJoined                         // пришёл по верной ссылке-приглашению
-	accessWrongCode                      // пришёл по ссылке с неверным кодом
-	accessDenied
-)
-
-// checkAccess решает, можно ли пользователю работать с ботом.
-func (b *Bot) checkAccess(ctx context.Context, userID int64, text string) (accessVerdict, error) {
-	if b.inviteCode == "" {
-		return accessGranted, nil // приглашения выключены — бот открыт
-	}
-
-	member, err := b.users.Exists(ctx, userID)
-	if err != nil {
-		return 0, err
-	}
-	if member {
-		return accessGranted, nil
-	}
-
-	code, ok := startPayload(text)
-	if !ok || code == "" {
-		return accessDenied, nil
-	}
-
-	if subtle.ConstantTimeCompare([]byte(code), []byte(b.inviteCode)) == 1 {
-		return accessJoined, nil
-	}
-	return accessWrongCode, nil
-}
-
-func startPayload(text string) (string, bool) {
-	if !isStart(text) {
-		return "", false
-	}
-	_, payload, _ := strings.Cut(strings.TrimSpace(text), " ")
-	return strings.TrimSpace(payload), true
 }
 
 // isStart узнаёт команду /start, в том числе с упоминанием бота: /start@my_bot.

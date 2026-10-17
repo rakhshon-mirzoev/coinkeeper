@@ -4,8 +4,6 @@ go 1.25.5
 
 require github.com/jackc/pgx/v5 v5.11.0
 
-require github.com/jackc/pgx-shopspring-decimal v0.0.0-20220624020537-1d36b5a1853e
-
 require (
 	github.com/anthropics/anthropic-sdk-go v1.82.0
 	github.com/go-telegram/bot v1.27.0

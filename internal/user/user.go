@@ -39,14 +39,6 @@ func (r *PostgresRepo) Upsert(ctx context.Context, u User) error {
 	return nil
 }
 
-func (r *PostgresRepo) Exists(ctx context.Context, id int64) (bool, error) {
-	var ok bool
-	if err := r.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM users WHERE id = $1)`, id).Scan(&ok); err != nil {
-		return false, fmt.Errorf("check user: %w", err)
-	}
-	return ok, nil
-}
-
 func (r *PostgresRepo) List(ctx context.Context) ([]User, error) {
 	rows, err := r.pool.Query(ctx, `SELECT id, first_name, username, created_at FROM users ORDER BY first_name, id`)
 	if err != nil {
